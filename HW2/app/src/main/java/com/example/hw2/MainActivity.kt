@@ -148,8 +148,8 @@ fun NetworkConnectionListener(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchableCoilGifList(apiKey: String) {
-    var searchQuery by remember { mutableStateOf("") }
-    var executeSearch by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var executeSearch by rememberSaveable { mutableStateOf(false) }
 
     Column {
         Row(
@@ -205,9 +205,25 @@ interface GiphyApiService {
 data class GiphyResponse(val data: List<GifData>)
 data class GifData(val images: GifImages)
 data class GifImages(val original: GifOriginal)
-data class GifOriginal(val url: String)
+//data class GifOriginal(val url: String)
+data class GifOriginal(val url: String, val width: String, val height: String)
+data class GifMetadata(val url: String, val width: String, val height: String)
 
-suspend fun getGiphyGifs(apiKey: String, query: String, limit: Int, offset: Int): List<String> {
+//suspend fun getGiphyGifs(apiKey: String, query: String, limit: Int, offset: Int): List<String> {
+//    val retrofit = Retrofit.Builder()
+//        .baseUrl("https://api.giphy.com/")
+//        .addConverterFactory(GsonConverterFactory.create())
+//        .build()
+//
+//    val service = retrofit.create(GiphyApiService::class.java)
+//    return try {
+//        val response = service.searchGifs(apiKey, query, limit, offset)
+//        response.data.map { it.images.original.url }
+//    } catch (e: Exception) {
+//        emptyList()
+//    }
+//}
+suspend fun getGiphyGifs(apiKey: String, query: String, limit: Int, offset: Int): List<GifMetadata> {
     val retrofit = Retrofit.Builder()
         .baseUrl("https://api.giphy.com/")
         .addConverterFactory(GsonConverterFactory.create())
@@ -216,7 +232,7 @@ suspend fun getGiphyGifs(apiKey: String, query: String, limit: Int, offset: Int)
     val service = retrofit.create(GiphyApiService::class.java)
     return try {
         val response = service.searchGifs(apiKey, query, limit, offset)
-        response.data.map { it.images.original.url }
+        response.data.map { GifMetadata(it.images.original.url, it.images.original.width, it.images.original.height) }
     } catch (e: Exception) {
         emptyList()
     }
@@ -227,12 +243,13 @@ fun CoilGifList(apiKey: String, search: String) {
     val context = LocalContext.current
     val wasLoaded = rememberSaveable { mutableStateOf(false) }
     val imageCount = rememberSaveable { mutableIntStateOf(20) }
-    var gifUrls = rememberSaveable { mutableStateOf<List<String>>(listOf()) }
+    var gifUrls = rememberSaveable { mutableStateOf<List<GifMetadata>>(listOf()) }
     val listState = rememberLazyGridState()
     var isConnected by rememberSaveable { mutableStateOf(isInternetAvailable(context = context)) }
     val loadedImagesCount = rememberSaveable { mutableIntStateOf(0) }
     val coroutineScope = rememberCoroutineScope()
     var connected by rememberSaveable { mutableStateOf(true) }
+    var lostConnection by rememberSaveable { mutableStateOf(false) }
     NetworkConnectionListener { connected = it }
 
     fun reloadImages() {
@@ -256,6 +273,29 @@ fun CoilGifList(apiKey: String, search: String) {
 //            isConnected = false
 //        }
 //    }
+    LaunchedEffect(connected) {
+        if (!connected) {
+            lostConnection = true
+        }
+    }
+
+    if (lostConnection) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+        ) {
+            Text(text = "Соедниенение потеряно")
+            Button(onClick = {
+                if (isInternetAvailable(context)) {
+                    reloadImages()
+                    lostConnection = false
+                }
+
+            }) {
+                Text("Попробовать снова")
+            }
+        }
+    }
 
     if (!isConnected) {
         Button(onClick = { reloadImages() }) {
@@ -285,7 +325,6 @@ fun CoilGifList(apiKey: String, search: String) {
                 .collect { visibleItems ->
                     val lastVisibleItem = visibleItems.lastOrNull()
                     if (lastVisibleItem != null && lastVisibleItem.index >= imageCount.intValue - 1) {
-                        // Увеличиваем imageCount на 20, когда достигаем конца списка
                         if (isInternetAvailable(context = context)) {
                             imageCount.intValue += 20
                         }
@@ -298,7 +337,8 @@ fun CoilGifList(apiKey: String, search: String) {
             contentPadding = PaddingValues(8.dp)
         ) {
             items(gifUrls.value) { gifUrl ->
-                CoilGifImage(gifUrl)
+                //CoilGifImage(gifUrl.url, gifUrl.width, gifUrl.height)
+                CoilGifImage(gifUrl.url)
             }
         }
         if (!connected) {
@@ -308,6 +348,116 @@ fun CoilGifList(apiKey: String, search: String) {
         }
     }
 }
+
+//@Composable
+//fun CoilGifList(apiKey: String, search: String) {  //Без учета размера изображения
+//    val context = LocalContext.current
+//    val wasLoaded = rememberSaveable { mutableStateOf(false) }
+//    val imageCount = rememberSaveable { mutableIntStateOf(20) }
+//    var gifUrls = rememberSaveable { mutableStateOf<List<String>>(listOf()) }
+//    val listState = rememberLazyGridState()
+//    var isConnected by rememberSaveable { mutableStateOf(isInternetAvailable(context = context)) }
+//    val loadedImagesCount = rememberSaveable { mutableIntStateOf(0) }
+//    val coroutineScope = rememberCoroutineScope()
+//    var connected by rememberSaveable { mutableStateOf(true) }
+//    var lostConnection by rememberSaveable { mutableStateOf(false) }
+//    NetworkConnectionListener { connected = it }
+//
+//    fun reloadImages() {
+//        coroutineScope.launch {
+//            if (isInternetAvailable(context)) {
+//                isConnected = true
+//                val newGifs = getGiphyGifs(
+//                    apiKey,
+//                    search,
+//                    imageCount.intValue - loadedImagesCount.intValue,
+//                    loadedImagesCount.intValue
+//                )
+//                gifUrls.value = gifUrls.value + newGifs
+//                loadedImagesCount.intValue = imageCount.intValue
+//            }
+//        }
+//    }
+//
+////    LaunchedEffect(connectionLost){
+////        if (!isInternetAvailable(context)){
+////            isConnected = false
+////        }
+////    }
+//    LaunchedEffect(connected) {
+//        if (!connected) {
+//            lostConnection = true
+//        }
+//    }
+//
+//    if (lostConnection) {
+//        Row(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//        ) {
+//            Text(text = "Соедниенение потеряно")
+//            Button(onClick = {
+//                if (isInternetAvailable(context)) {
+//                    reloadImages()
+//                    lostConnection = false
+//                }
+//
+//            }) {
+//                Text("Попробовать снова")
+//            }
+//        }
+//    }
+//
+//    if (!isConnected) {
+//        Button(onClick = { reloadImages() }) {
+//            Text("Попробовать снова")
+//        }
+//    } else {
+//        if (!wasLoaded.value) {
+//            imageCount.intValue = 20
+//            wasLoaded.value = true
+//        }
+//
+//        LaunchedEffect(imageCount.intValue) {
+//            if (isInternetAvailable(context = context)) {
+//                val newGifs = getGiphyGifs(
+//                    apiKey,
+//                    search,
+//                    imageCount.intValue - loadedImagesCount.intValue,
+//                    loadedImagesCount.intValue
+//                )
+//                gifUrls.value = gifUrls.value + newGifs
+//                loadedImagesCount.intValue = imageCount.intValue
+//            }
+//        }
+//
+//        LaunchedEffect(listState) {
+//            snapshotFlow { listState.layoutInfo.visibleItemsInfo }
+//                .collect { visibleItems ->
+//                    val lastVisibleItem = visibleItems.lastOrNull()
+//                    if (lastVisibleItem != null && lastVisibleItem.index >= imageCount.intValue - 1) {
+//                        if (isInternetAvailable(context = context)) {
+//                            imageCount.intValue += 20
+//                        }
+//                    }
+//                }
+//        }
+//        LazyVerticalGrid(
+//            state = listState,
+//            columns = GridCells.Fixed(2),
+//            contentPadding = PaddingValues(8.dp)
+//        ) {
+//            items(gifUrls.value) { gifUrl ->
+//                CoilGifImage(gifUrl)
+//            }
+//        }
+//        if (!connected) {
+//            Button(onClick = { reloadImages() }) {
+//                Text("Попробовать снова")
+//            }
+//        }
+//    }
+//}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -356,7 +506,6 @@ fun CoilGifList(apiKey: String, search: String) {
 //            .collect { visibleItems ->
 //                val lastVisibleItem = visibleItems.lastOrNull()
 //                if (lastVisibleItem != null && lastVisibleItem.index >= imageCount.intValue - 1) {
-//                    // Увеличиваем imageCount на 20, когда достигаем конца списка
 //                    if (isInternetAvailable(context = context)) {
 //                        imageCount.intValue += 20
 //                    }
@@ -419,7 +568,48 @@ fun CoilGifList(apiKey: String, search: String) {
 //}
 
 @Composable
-fun CoilGifImage(gifUrl: String) {
+fun CoilGifImage(gifUrl: String, width: String, height: String) { //Попытка сделать так, чтобы учитывались размеры изображения
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(width.toFloat() / height.toFloat()),
+        contentAlignment = Alignment.Center
+    ) {
+        val context = LocalContext.current
+        val imageLoader = ImageLoader.Builder(context)
+            .components {
+                if (SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .build()
+        val painter = rememberAsyncImagePainter(
+            ImageRequest.Builder(context).data(data = gifUrl).apply(block = {
+            })
+                .build(), imageLoader = imageLoader
+        )
+
+        if (painter.state is AsyncImagePainter.State.Loading) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .size(50.dp)
+                    .padding(16.dp)
+            )
+        }
+        Image(
+            painter = painter,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+
+            )
+    }
+}
+
+@Composable
+fun CoilGifImage(gifUrl: String) {  //без учета размеров изображения
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -458,107 +648,3 @@ fun CoilGifImage(gifUrl: String) {
             )
     }
 }
-
-//@Composable
-//fun CoilGifList() {
-//    val gifUrls = mutableListOf(
-//        "https://cataas.com/cat",
-//        "https://cataas.com/cat/gif",
-//        "https://cataas.com/cat",
-//        // Добавьте другие URL-адреса GIF по вашему выбору
-//    )
-//    repeat(10) { gifUrls.add("https://cataas.com/cat") }
-//
-//
-//    LazyVerticalGrid(
-//        GridCells.Fixed(3), // Здесь можно настроить количество столбцов
-//    ) {
-//        items(gifUrls) { gifUrl ->
-//            CoilGifImage(gifUrl)
-//        }
-//    }
-//}
-//
-//@Composable
-//fun CoilGifImage(gifUrl: String) {
-//    var isLoading by remember { mutableStateOf(true) }
-//
-//    Box(
-//        modifier = Modifier
-//            .height(150.dp)
-//            .width(150.dp),
-//        contentAlignment = Alignment.Center
-//    ) {
-//        val painter = // Включите это, чтобы гарантировать, что GIF будет отображаться корректно
-//            rememberAsyncImagePainter(
-//                ImageRequest.Builder(LocalContext.current).data(data = "https://cataas.com/cat").apply(block = fun ImageRequest.Builder.() {
-//                    allowHardware(false) // Включите это, чтобы гарантировать, что GIF будет отображаться корректно
-//
-//                    listener(
-//                        onStart = { _ ->
-//                            isLoading = true
-//                        },
-//                        onSuccess = { _, _ ->
-//                            isLoading = false
-//                        },
-//                        onError = { _, _ ->
-//                            isLoading = false
-//                        }
-//                    )
-//                }).build()
-//            )
-//
-//        Image(
-//            painter = painter,
-//            contentDescription = "gif",
-//            modifier = Modifier.fillMaxSize()
-//        )
-//
-//        if (isLoading) {
-//            CircularProgressIndicator(
-//                modifier = Modifier
-//                    .size(50.dp)
-//                    .padding(16.dp)
-//            )
-//        }
-//    }
-//}
-
-
-//@Composable
-//fun CoilGifImage() {
-//    var isLoading by remember { mutableStateOf(true) }
-//    Box(
-//        modifier = Modifier
-//            .height(150.dp)
-//            .width(150.dp),
-//        contentAlignment = Alignment.Center
-//    ) {
-//        val painter = rememberImagePainter(
-//            data = "https://cataas.com/cat/gif",
-//            builder = {
-//                allowHardware(false) // Включите это, чтобы гарантировать, что GIF будет отображаться корректно
-//                listener(
-//                    onStart = { _ ->
-//                        isLoading = true
-//                    },
-//                    onSuccess = { _, _ ->
-//                        isLoading = false
-//                    },
-//                    onError = { _, _ ->
-//                        isLoading = false
-//                    }
-//                )
-//            }
-//        )
-//        Image(painter = painter, contentDescription = "gif")
-//        if (isLoading) {
-//            CircularProgressIndicator(
-//                modifier = Modifier
-//                    .size(50.dp)
-//                    .padding(16.dp)
-//            )
-//        }
-//    }
-//}
-
